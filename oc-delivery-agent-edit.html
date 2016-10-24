@@ -1,5 +1,10 @@
 <link rel="import" href="../polymer/polymer.html">
 
+<link rel="import" href="../paper-button/paper-button.html">
+<link rel="import" href="../paper-input/paper-input.html">
+<link rel="import" href="../iron-form/iron-form.html">
+<link rel="import" href="../oc-delivery-agent-api/oc-delivery-agent-api.html">
+
 <!--
 `oc-delivery-agent-edit`
 Element to edit a delivery agent on the Ordercloud platform
@@ -14,19 +19,47 @@ Element to edit a delivery agent on the Ordercloud platform
         display: block;
       }
     </style>
-    <h2>Hello [[prop1]]</h2>
+
+    <oc-delivery-agent-api id="deliveryApi"></oc-delivery-agent-api>
+
   </template>
 
   <script>
     Polymer({
 
       is: 'oc-delivery-agent-edit',
+      behaviors: [OC.Behaviours.ApiConsumer],
 
       properties: {
-        prop1: {
-          type: String,
-          value: 'oc-delivery-agent-edit',
+        organisationId: Number,
+        agentId: Number,
+        loading: {
+          type: Boolean,
+          notify: true
         },
+
+        agentData : Array,
+      },
+
+      observers : [
+        'refresh(organisationId, agentId)'
+      ],
+
+      refresh : function(){
+
+        if(!this.agentId || !this.organisationId) return;
+
+        this._getAgentDetails(this.agentId);
+
+      },
+
+      _getAgentDetails : function(agentId) {
+        this.loading = true;
+
+        this.$.deliveryApi._getAgentDetails(agentId)
+                .then(this._setPropertyResponse.bind(this, 'agentData'))
+                .catch(this.fire.bind(this, 'delivery-agents-error', 'Failed to load delivery agent details'))
+                .finally(this.set.bind(this, 'loading', false));
       },
 
     });
