@@ -10,7 +10,7 @@
 `oc-delivery-agent-edit`
 Element to edit a delivery agent on the Ordercloud platform
 
-@demo demo/index.html 
+@demo demo/index.html
 -->
 
 <dom-module id="oc-delivery-agent-edit">
@@ -24,6 +24,62 @@ Element to edit a delivery agent on the Ordercloud platform
     <oc-delivery-agent-api id="deliveryApi"></oc-delivery-agent-api>
     <oc-user-api id="userApi"></oc-user-api>
 
+    <form is="iron-form" id="editAgentForm">
+      <paper-input
+              name="cellphoneNumber"
+              label="Cellphone Number"
+              value="[[agentData.user.profile.cellphoneNumber]]"
+              type="string"
+              pattern="[0-9]*"
+              minlength="11"
+              maxlength="11"
+              always-float-label
+              auto-validate
+              error-message="please enter a valid cellphone number with a country code"
+              required >
+
+      </paper-input>
+
+      <paper-input name="minBalance" label="Min Balance" value="[[agentData.minBalance]]" type="number" always-float-label >
+        <div prefix>R</div>
+      </paper-input>
+
+      <paper-input name="maxBalance" label="Max Balance" value="[[agentData.maxBalance]]" type="number" always-float-label >
+        <div prefix>R</div>
+      </paper-input>
+
+      <paper-input
+              name="bankAccNumber"
+              label="Acc Number (last 6 Digits)"
+              type="string"
+              char-counter
+              maxlength="6"
+              value="[[agentData.accountNo]]"
+              pattern="[0-9]*"
+              always-float-label
+              error-message="only 6 digit numbers are valid"
+              auto-validate>
+
+      </paper-input>
+
+      <paper-input
+              name="cardNumber"
+              label="Card Number (last 4 Digits)"
+              type="string"
+              char-counter
+              maxlength="4"
+              value="[[agentData.cardNo]]"
+              pattern="[0-9]*"
+              always-float-label
+              error-message="only 4 digit numbers are valid"
+              auto-validate>
+
+      </paper-input>
+    </form>
+
+    <paper-button raised on-tap="_submitForm">Submit</paper-button>
+    <paper-button raised on-tap="_formCancel">Cancel</paper-button>
+
   </template>
 
   <script>
@@ -34,7 +90,7 @@ Element to edit a delivery agent on the Ordercloud platform
 
       properties: {
         organisationId: Number,
-        agentId: Number,
+        userId: Number,
         loading: {
           type: Boolean,
           notify: true
@@ -44,25 +100,102 @@ Element to edit a delivery agent on the Ordercloud platform
       },
 
       observers : [
-        'refresh(organisationId, agentId)'
+        'refresh(organisationId, userId)'
       ],
+
+      listeners: {
+        'iron-form-presubmit' : '_UpdateAgentHandler'
+      },
 
       refresh : function(){
 
-        if(!this.agentId || !this.organisationId) return;
+        if(!this.userId || !this.organisationId) return;
 
-        this._getAgentDetails(this.agentId);
+        this._getDeliveryAgent(this.organisationId, this.userId);
 
       },
 
-      _getAgentDetails : function(agentId) {
+      _getDeliveryAgent : function(organisationId, userId) {
         this.loading = true;
 
-        this.$.deliveryApi._getAgentDetails(agentId)
+        this.$.deliveryApi.getDeliveryAgent(organisationId, userId)
                 .then(this._setPropertyResponse.bind(this, 'agentData'))
                 .catch(this.fire.bind(this, 'delivery-agents-error', 'Failed to load delivery agent details'))
                 .finally(this.set.bind(this, 'loading', false));
       },
+
+      _submitForm : function(e) {
+        this.$.editAgentForm.submit();
+      },
+
+      _formCancel : function(){
+        this.fire('oc-page-to', '/agents-list');
+      },
+
+      _UpdateAgentHandler : function(e) {
+        event.preventDefault();
+        var params = this.$.editAgentForm.serialize();
+
+        params.maxBalance = (params.maxBalance !== "") ? params.maxBalance : -1;
+        params.minBalance = (params.minBalance !== "") ? params.minBalance : -1;
+
+        params.bankAccNumber = (params.bankAccNumber !== null) ? params.bankAccNumber : "";
+        params.cardNumber = (params.cardNumber !== null) ? params.cardNumber : "";
+
+        if(this.agentData && params.cellphoneNumber !== this.agentData.user.profile.cellphoneNumber){
+          this._updateUserProfile(params.cellphoneNumber);
+
+        }
+
+        if(this.agentData && (params.minBalance !== this.agentData.minBalance || params.maxBalance !== this.agentData.maxBalance)){
+          this._updateAgentBalance(params.minBalance, params.maxBalance)
+        }
+
+        if(this.agentData && (params.bankAccNumber !== this.agentData.accountNo || params.cardNumber !== this.agentData.cardNo)){
+          this._updateAgentAccounts(params.bankAccNumber, params.cardNumber)
+        }
+
+      },
+
+      _updateUserProfile : function(cellphoneNumber){
+        var profileData = {},
+                agentData = this.agentData.user.profile;
+
+        profileData.cellphoneNumber = cellphoneNumber;
+
+        profileData.email = agentData.email;
+        profileData.firstName = agentData.firstName;
+        profileData.nickName = agentData.nickName;
+        profileData.sex = agentData.sex;
+        profileData.surname = agentData.surname;
+
+        this.$.userApi.updateProfile(this.agentData.user.id, profileData)
+                .then(function(request){
+                  this.set('agentData.user.profile', request.response);
+                }.bind(this))
+                .catch(this.fire.bind(this, 'delivery-agents-error', 'Failed to update delivery agent details'))
+                .finally(this.set.bind(this, 'loading', false));
+      },
+
+      _updateAgentBalance : function(minBalance, maxBalance){
+        this.$.deliveryApi.updateBalanceLimits(this.organisationId, this.agentData.id, minBalance, maxBalance)
+                .then(function(request){
+                  this.set('agentData.maxBalance', request.response.maxBalance);
+                  this.set('agentData.minBalance', request.response.minBalance);
+                }.bind(this))
+                .catch(this.fire.bind(this, 'delivery-agents-error', 'Failed to update delivery agent details'))
+                .finally(this.set.bind(this, 'loading', false));
+      },
+
+      _updateAgentAccounts : function(bankAccNumber, cardNumber){
+        this.$.deliveryApi.updateBalanceLimits(this.organisationId, this.agentData.id, bankAccNumber, cardNumber)
+                .then(function(request){
+                  this.set('agentData.accountNo', request.response.accountNo);
+                  this.set('agentData.cardNo', request.response.cardNo);
+                }.bind(this))
+                .catch(this.fire.bind(this, 'delivery-agents-error', 'Failed to update delivery agent details'))
+                .finally(this.set.bind(this, 'loading', false));
+      }
 
     });
   </script>
